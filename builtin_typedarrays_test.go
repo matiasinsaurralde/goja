@@ -512,3 +512,29 @@ func TestToSortedSubarray(t *testing.T) {
 	`
 	testScriptWithTestLib(SCRIPT, _undefined, t)
 }
+
+func TestTypedArraySetEmptyMixedType(t *testing.T) {
+	// A zero-length, different-type source must be a no-op, not a crash. Previously
+	// the mixed-type path in set() unconditionally took the address of the backing
+	// slice (&data[0]), which panics when a view is backed by a zero-length buffer.
+	const SCRIPT = `
+	// zero-length source of a different element type
+	new Uint8Array(8).set(new Int16Array(0), 0);
+	// source over a zero-length ArrayBuffer, non-zero targetOffset
+	new Uint8Array(8).set(new Uint16Array(new ArrayBuffer(0)), 3);
+	// both sides empty
+	new Uint8Array(new ArrayBuffer(0)).set(new Int16Array(0), 0);
+	new Float64Array(4).set(new Int8Array(0), 2);
+
+	// The BigInt/non-BigInt content-type check must still fire at length 0.
+	var threw = false;
+	try { new Uint8Array(8).set(new BigInt64Array(0), 0); } catch (e) { threw = e instanceof TypeError; }
+	assert(threw, "zero-length BigInt source must throw TypeError");
+
+	// A normal mixed-type copy is unaffected.
+	var d = new Uint8Array(4);
+	d.set(new Float64Array([1, 2, 3]), 1);
+	assert(compareArray(d, [0, 1, 2, 3]), "mixed-type copy");
+	`
+	testScriptWithTestLib(SCRIPT, _undefined, t)
+}

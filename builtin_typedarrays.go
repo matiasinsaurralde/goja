@@ -1016,41 +1016,46 @@ func (r *Runtime) typedArrayProto_set(call FunctionCall) Value {
 					src.viewedArrayBuf.data[src.offset*src.elemSize:(src.offset+srcLen)*src.elemSize])
 			} else {
 				checkTypedArrayMixBigInt(src.defaultCtor, ta.defaultCtor)
-				curSrc := uintptr(unsafe.Pointer(&src.viewedArrayBuf.data[src.offset*src.elemSize]))
-				endSrc := curSrc + uintptr(srcLen*src.elemSize)
-				curDst := uintptr(unsafe.Pointer(&ta.viewedArrayBuf.data[(ta.offset+targetOffset)*ta.elemSize]))
-				dstOffset := ta.offset + targetOffset
-				srcOffset := src.offset
-				if ta.elemSize == src.elemSize {
-					if curDst <= curSrc || curDst >= endSrc {
-						for i := 0; i < srcLen; i++ {
-							ta.typedArray.set(dstOffset+i, src.typedArray.get(srcOffset+i))
+				// srcLen == 0 is a no-op; guard the pointer arithmetic below, which
+				// would otherwise index an empty backing slice (&data[0]) and panic
+				// when either view is backed by a zero-length buffer.
+				if srcLen > 0 {
+					curSrc := uintptr(unsafe.Pointer(&src.viewedArrayBuf.data[src.offset*src.elemSize]))
+					endSrc := curSrc + uintptr(srcLen*src.elemSize)
+					curDst := uintptr(unsafe.Pointer(&ta.viewedArrayBuf.data[(ta.offset+targetOffset)*ta.elemSize]))
+					dstOffset := ta.offset + targetOffset
+					srcOffset := src.offset
+					if ta.elemSize == src.elemSize {
+						if curDst <= curSrc || curDst >= endSrc {
+							for i := 0; i < srcLen; i++ {
+								ta.typedArray.set(dstOffset+i, src.typedArray.get(srcOffset+i))
+							}
+						} else {
+							for i := srcLen - 1; i >= 0; i-- {
+								ta.typedArray.set(dstOffset+i, src.typedArray.get(srcOffset+i))
+							}
 						}
 					} else {
-						for i := srcLen - 1; i >= 0; i-- {
-							ta.typedArray.set(dstOffset+i, src.typedArray.get(srcOffset+i))
+						x := int(curDst-curSrc) / (src.elemSize - ta.elemSize)
+						if x < 0 {
+							x = 0
+						} else if x > srcLen {
+							x = srcLen
 						}
-					}
-				} else {
-					x := int(curDst-curSrc) / (src.elemSize - ta.elemSize)
-					if x < 0 {
-						x = 0
-					} else if x > srcLen {
-						x = srcLen
-					}
-					if ta.elemSize < src.elemSize {
-						for i := x; i < srcLen; i++ {
-							ta.typedArray.set(dstOffset+i, src.typedArray.get(srcOffset+i))
-						}
-						for i := x - 1; i >= 0; i-- {
-							ta.typedArray.set(dstOffset+i, src.typedArray.get(srcOffset+i))
-						}
-					} else {
-						for i := 0; i < x; i++ {
-							ta.typedArray.set(dstOffset+i, src.typedArray.get(srcOffset+i))
-						}
-						for i := srcLen - 1; i >= x; i-- {
-							ta.typedArray.set(dstOffset+i, src.typedArray.get(srcOffset+i))
+						if ta.elemSize < src.elemSize {
+							for i := x; i < srcLen; i++ {
+								ta.typedArray.set(dstOffset+i, src.typedArray.get(srcOffset+i))
+							}
+							for i := x - 1; i >= 0; i-- {
+								ta.typedArray.set(dstOffset+i, src.typedArray.get(srcOffset+i))
+							}
+						} else {
+							for i := 0; i < x; i++ {
+								ta.typedArray.set(dstOffset+i, src.typedArray.get(srcOffset+i))
+							}
+							for i := srcLen - 1; i >= x; i-- {
+								ta.typedArray.set(dstOffset+i, src.typedArray.get(srcOffset+i))
+							}
 						}
 					}
 				}

@@ -234,6 +234,38 @@ func TestArraySort(t *testing.T) {
 	testScriptWithTestLib(SCRIPT, _undefined, t)
 }
 
+func TestArraySortShrinkDuringCompare(t *testing.T) {
+	// A comparator that shrinks a dense array mid-sort used to index the backing
+	// slice out of range on the fast path, panicking with a Go "index out of
+	// range" that escapes RunString (an uncaught host crash from pure JS). It
+	// must now complete without a panic; per spec the resulting order is
+	// implementation-defined, only memory-safety and termination are required.
+	const SCRIPT = `
+	(function() {
+		var a = [4, 3, 2, 1];
+		a.sort(function(x, y) { a.length = 0; return x - y; });
+		assert.sameValue(a.length, 0, "shrink to zero");
+	})();
+
+	(function() {
+		var a = [5, 4, 3, 2, 1];
+		a.sort(function(x, y) { if (a.length > 1) a.length = 1; return x - y; });
+		assert.sameValue(a.length, 1, "partial shrink");
+	})();
+
+	// A comparator that grows the array must also stay safe.
+	(function() {
+		var a = [3, 2, 1];
+		a.sort(function(x, y) { a.push(9); return x - y; });
+	})();
+
+	// Normal sorting is unaffected.
+	assert(compareArray([3, 1, 2, 5, 4].sort(function(x, y) { return x - y; }), [1, 2, 3, 4, 5]), "numeric");
+	assert(compareArray([3, 1, 2, 10].sort(), [1, 10, 2, 3]), "default lexicographic");
+	`
+	testScriptWithTestLib(SCRIPT, _undefined, t)
+}
+
 func TestArraySortNonStdArray(t *testing.T) {
 	const SCRIPT = `
 	const array = [undefined, 'c', /*hole*/, 'b', undefined, /*hole*/, 'a', 'd'];

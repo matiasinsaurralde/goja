@@ -183,6 +183,13 @@ func (a *arrayObject) sortLen() int {
 }
 
 func (a *arrayObject) sortGet(i int) Value {
+	// sort.Stable samples the length once, but a comparator can shrink the
+	// array mid-sort (e.g. by setting .length), truncating a.values. Treat an
+	// index that no longer exists as a hole (nil sorts to the end via
+	// sortCompare) instead of indexing out of range and panicking.
+	if i >= len(a.values) {
+		return nil
+	}
 	v := a.values[i]
 	if p, ok := v.(*valueProperty); ok {
 		v = p.get(a.val)
@@ -191,6 +198,10 @@ func (a *arrayObject) sortGet(i int) Value {
 }
 
 func (a *arrayObject) swap(i int, j int) {
+	// See sortGet: a comparator may have shrunk a.values mid-sort.
+	if i >= len(a.values) || j >= len(a.values) {
+		return
+	}
 	a.values[i], a.values[j] = a.values[j], a.values[i]
 }
 

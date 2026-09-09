@@ -242,6 +242,26 @@ func TestImportedString_CompareTo(t *testing.T) {
 	}
 }
 
+func TestMaxUnicodeCodePointEscape(t *testing.T) {
+	// The maximum code point U+10FFFF is a legal \u{...} escape. A lexer
+	// off-by-one used to leave the closing brace unconsumed at exactly that
+	// value, desynchronising the length counter and panicking during parsing
+	// (an uncaught host crash from valid, attacker-suppliable source). A value
+	// above the maximum must still be a catchable SyntaxError, not a panic.
+	const SCRIPT = `
+	assert.sameValue("\u{10FFFF}".length, 2, "surrogate pair length");
+	assert.sameValue("\u{10FFFF}".codePointAt(0), 0x10FFFF, "max code point");
+	assert.sameValue("\u{0010FFFF}".codePointAt(0), 0x10FFFF, "leading zeros");
+	assert.sameValue("\u{10FFFE}".codePointAt(0), 0x10FFFE, "just below max");
+	assert.sameValue(Object.keys({"\u{10FFFF}": 1})[0].length, 2, "object key");
+
+	var threw = false;
+	try { eval('"\\u{110000}"'); } catch (e) { threw = e instanceof SyntaxError; }
+	assert(threw, "code point above U+10FFFF must be a SyntaxError");
+	`
+	testScriptWithTestLib(SCRIPT, _undefined, t)
+}
+
 func BenchmarkASCIIConcat(b *testing.B) {
 	vm := New()
 

@@ -699,7 +699,7 @@ func (self *_parser) scanEscape(quote rune) (int, bool) {
 				self.read()
 			}
 		} else {
-			for self.chr != quote && self.chr >= 0 && value < utf8.MaxRune {
+			for self.chr != quote && self.chr >= 0 {
 				if self.chr == '}' {
 					self.read()
 					break
@@ -708,7 +708,16 @@ func (self *_parser) scanEscape(quote rune) (int, bool) {
 				if digit >= base {
 					break
 				}
-				value = value*base + digit
+				// Clamp accumulation at the maximum code point so an overlong or
+				// out-of-range sequence cannot overflow uint32. The loop must still
+				// terminate on the closing brace, not on the value: ending it at
+				// exactly utf8.MaxRune (0x10FFFF) left '}' unconsumed, so scanString
+				// double-counted it and parseStringLiteral panicked on the length
+				// mismatch. The out-of-range value itself is reported as a
+				// SyntaxError by parseStringLiteral.
+				if value <= utf8.MaxRune {
+					value = value*base + digit
+				}
 				self.read()
 			}
 		}
